@@ -44,10 +44,11 @@ class GameLogic:
     for num, roll in rolls.items():
       if roll >= 3:
         if num == 1:
-          score += 1000 * (roll - 2)  # More than three 1s
+          score += 1000 * (roll - 2) # N of a kind 1
         else:
-          score += num * 100 * (roll - 2)
+          score += num * 100 * (roll - 2) # N of a kind others
 
+    # Leftover 1s and 5s
     if rolls[1] < 3:
         score += rolls[1] * 100
     if rolls[5] < 3:
