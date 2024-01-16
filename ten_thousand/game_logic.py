@@ -43,16 +43,10 @@ class GameLogic:
 
     for num, roll in rolls.items():
       if roll >= 3:
-          if num == 1:
-              if roll == 3:
-                  score += 1000  # Three 1s
-              else:
-                  score += 1000 * (roll - 2)  # More than three 1s
-          else:
-              if roll == 3:
-                  score += num * 100
-              else:
-                  score += num * 100 * (roll - 2)
+        if num == 1:
+          score += 1000 * (roll - 2)  # More than three 1s
+        else:
+          score += num * 100 * (roll - 2)
 
     if rolls[1] < 3:
         score += rolls[1] * 100
