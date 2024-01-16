@@ -1,73 +1,75 @@
 import random
+from collections import Counter
 
 class GameLogic:
   """
-  A class to represent the game logic for a dice game, such as Dice 10000.
-
-  This class provides methods for rolling dice and calculating scores based 
-  on the outcome of the dice rolls.
+  A class representing the game logic for a dice game.
+  
+  This class provides methods for rolling dice and calculating scores
+  based on specific game rules.
   """
 
   @staticmethod
   def calculate_score(dice):
     """
-    Calculate the score for a given roll of dice in Dice 10000.
+    Calculate and return the score for a given dice roll.
 
-    The score is calculated based on a set of rules which include straights,
-    three pairs, sets of a kind (like three or more 1s), and leftover 1s and 5s.
+    The scoring is based on specific rules:
+    - A straight set (1-6) returns 1500.
+    - Three pairs return 1500.
+    - N of a kind (where N > 3) for any number except 1 gives that number multiplied by 100, 
+      then multiplied by (N - 2).
+    - For the number 1, N of a kind gives 1000 multiplied by (N - 2).
+    - A set of two pairs of 3 returns the sum of the N of a kind values for both sets.
+    - Remaining 1s and 5s add 100 and 50 points each, respectively.
 
     Parameters:
-    dice (tuple): A tuple of integers representing the outcome of the dice roll.
+    dice_roll (tuple of int): A tuple representing the dice roll.
 
     Returns:
-    int: The calculated score for the given roll of dice.
+    int: The calculated score.
     """
 
     score = 0
-    rolls = [dice.count(i) for i in range(1,7)]
+    rolls = Counter(dice)
 
     # Straight
-    if sorted(dice) == [1, 2, 3, 4, 5, 6]:
+    if set(dice) == set(range(1, 7)):
       return 1500
     
     # Three Pair
-    if len([roll for roll in rolls if roll == 2]) == 3:
+    if len(rolls) == 3 and all(roll == 2 for roll in rolls.values()):
       return 1500
 
-    # # Full House
-    # if 3 in rolls and 2 in rolls and rolls.index(3) != rolls.index(2):
-    #   return 1500
-    
-    # Double Trips
-    if rolls.count(3) == 2:
-        return sum([(1000 if i == 0 else (i + 1) * 100) for i, count in enumerate(rolls) if count == 3])
-    
-    for i in range(6):
-      roll = rolls[i]
-      # Sets of a kind
+    for num, roll in rolls.items():
       if roll >= 3:
-        base_score = 1000 if i == 0 else (i + 1) * 100
-        score += base_score * (roll - 2)
-        if i == 0 or i == 4:
-          roll = 0 
-      # Leftover 1s and 5s
-      elif i == 0 or i == 4:
-        score += (100 if i == 0 else 50) * roll
+          if num == 1:
+              if roll == 3:
+                  score += 1000  # Three 1s
+              else:
+                  score += 1000 * (roll - 2)  # More than three 1s
+          else:
+              if roll == 3:
+                  score += num * 100
+              else:
+                  score += num * 100 * (roll - 2)
+
+    if rolls[1] < 3:
+        score += rolls[1] * 100
+    if rolls[5] < 3:
+        score += rolls[5] * 50
 
     return score
   
   @staticmethod
   def roll_dice(dice):
     """
-    Calculate the score for a given roll of dice in Dice 10000.
-
-    The score is calculated based on a set of rules which include straights,
-    three pairs, sets of a kind (like three or more 1s), and leftover 1s and 5s.
+    Roll a specified number of dice and return the results.
 
     Parameters:
-    dice (tuple): A tuple of integers representing the outcome of the dice roll.
+    dice (int): The number of dice to roll.
 
     Returns:
-    int: The calculated score for the given roll of dice.
+    tuple: A tuple containing the results of each dice roll.
     """
     return tuple(random.randint(1, 6) for _ in range(0,dice))
