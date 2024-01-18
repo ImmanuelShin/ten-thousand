@@ -6,6 +6,10 @@
 
 ### Setup
 
+Run: python ten_thousand/game_logic.py
+
+'s' to start. 'q' to quit. 
+
 #### Tests
 Run Test: pytest  
 
