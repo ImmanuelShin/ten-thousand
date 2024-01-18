@@ -120,20 +120,27 @@ class Game:
     
     while dice_left > 0:
       dice_roll = self.game_logic.roll_dice(dice_left)
-      print(f"{player}'s roll:", dice_roll)
+      print(f"{player['name']}'s roll:", dice_roll)
 
-      roll_score = self.game_logic.calculate_score(dice_roll)
+      roll_score, is_hot = self.game_logic.calculate_score(dice_roll)
       if roll_score == 0:
-        print(f"Farkle! No scoring dice. {player}'s turn is over.\n")
+        print(f"Farkle! No scoring dice. {player['name']}'s turn is over.\n")
         round_score = 0
         break  # Ends the current round
+      if is_hot:
+        print(f"Hot Dice! {player['name']} receives another turn!")
+        round_score += roll_score
+        if self.bank_score(player, round_score):
+          return True  # End game
+        dice_left = 6
+        continue
       try:
         chosen_dice = self.set_aside_dice(dice_roll)
       except KeyboardInterrupt:
         print("\nGame ended by player.")
         return True  # Ends the game
-      roll_score = self.game_logic.calculate_score(chosen_dice)
-      print(f"{player} has chosen to keep:", chosen_dice)
+      roll_score, _ = self.game_logic.calculate_score(chosen_dice)
+      print(f"{player['name']} has chosen to keep:", chosen_dice)
 
       # Update round score and calculate the number of dice left
       round_score += roll_score
@@ -171,7 +178,8 @@ class Game:
         if not all(dice_roll.count(d) >= kept_dice.count(d) for d in kept_dice):
           print("Invalid selection. Please choose dice from the roll.")
           continue
-        if self.game_logic.calculate_score(kept_dice) > 0:
+        roll_score, _ = self.game_logic.calculate_score(kept_dice)
+        if roll_score > 0:
           return kept_dice
         else:
           print("At least one scoring die must be chosen.")
@@ -258,7 +266,7 @@ class Game:
     while True:
       print(f"\nRound {self.round_number}")
       for player in self.players:
-        print(f"\n{player}'s turn:")
+        print(f"\n{player['name']}'s turn. Score: {player['score']}")
         if self.play_round(player):
           return
 
@@ -309,15 +317,13 @@ class Game:
 
     if exact_winner:
       print(f"{exact_winner['name']}: {exact_winner['score']} pts (winner)")
+      sorted_players = sorted((player for player in self.players if player != exact_winner), key=lambda x: x['score'], reverse=True)
     else:
       # If no exact 10,000 points winner, the highest scorer is the default winner
       highest_score = max(self.players, key=lambda x: x['score'])
       print(f"{highest_score['name']}: {highest_score['score']} pts (winner)")
-    
-    # Need to figure this one out later
-    sorted_players = sorted((player for player in self.players if player != exact_winner), key=lambda x: x['score'],reverse=True)
+      sorted_players = sorted((player for player in self.players if player != highest_score), key=lambda x: x['score'], reverse=True)
 
-    # Still need to fix repeat name printing
     for player in sorted_players:
         print(f"{player['name']}: {player['score']} pts")
     
