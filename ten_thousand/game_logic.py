@@ -12,7 +12,7 @@ class GameLogic:
   @staticmethod
   def calculate_score(dice):
     """
-    Calculate and return the score for a given dice roll.
+    Calculate and return the score for a given dice roll and determine if it's a hot dice scenario.
 
     The scoring is based on specific rules:
     - A straight set (1-6) returns 1500.
@@ -27,22 +27,24 @@ class GameLogic:
     dice (tuple of int): A tuple representing the dice roll.
 
     Returns:
-    int: The calculated score.
+    tuple of (int, bool): The calculated score and a boolean indicating if it's a hot dice scenario.
     """
 
     score = 0
     rolls = Counter(dice)
+    hot_count = 0
 
     # Straight
     if set(dice) == set(range(1, 7)):
-      return 1500
+      return 1500, True
     
     # Three Pair
     if len(rolls) == 3 and all(roll == 2 for roll in rolls.values()):
-      return 1500
+      return 1500, True
 
     for num, roll in rolls.items():
       if roll >= 3:
+        hot_count += roll
         if num == 1:
           score += 1000 * (roll - 2) # N of a kind 1
         else:
@@ -51,10 +53,12 @@ class GameLogic:
     # Leftover 1s and 5s
     if rolls[1] < 3:
         score += rolls[1] * 100
+        hot_count += rolls[1]
     if rolls[5] < 3:
+        hot_count += rolls[5]
         score += rolls[5] * 50
 
-    return score
+    return score, hot_count == len(dice)
   
   @staticmethod
   def roll_dice(dice):
