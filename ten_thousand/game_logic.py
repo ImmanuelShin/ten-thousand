@@ -33,18 +33,20 @@ class GameLogic:
     score = 0
     rolls = Counter(dice)
     hot_count = 0
+    scoring_dice = []
 
     # Straight
     if set(dice) == set(range(1, 7)):
-      return 1500, True
+      return 1500, True, dice
     
     # Three Pair
     if len(rolls) == 3 and all(roll == 2 for roll in rolls.values()):
-      return 1500, True
+      return 1500, True, dice
 
     for num, roll in rolls.items():
       if roll >= 3:
         hot_count += roll
+        scoring_dice.extend([num] * roll)
         if num == 1:
           score += 1000 * (roll - 2) # N of a kind 1
         else:
@@ -54,11 +56,13 @@ class GameLogic:
     if rolls[1] < 3:
         score += rolls[1] * 100
         hot_count += rolls[1]
+        scoring_dice.extend([1] * rolls[1])
     if rolls[5] < 3:
         hot_count += rolls[5]
         score += rolls[5] * 50
+        scoring_dice.extend([5] * rolls[5])
 
-    return score, hot_count == len(dice)
+    return score, hot_count == len(dice), tuple(scoring_dice)
   
   @staticmethod
   def roll_dice(dice):
@@ -86,22 +90,29 @@ class GameLogic:
 
     while True:
       try:
-        kept_dice_input = input("Enter the dice you want to keep (e.g., 156 for keeping 1, 5, and 6): ")
+        print("Enter the dice you want to keep, or (q)uit:")
+        kept_dice_input = input("> ")
         if kept_dice_input.lower() == 'q':
           raise KeyboardInterrupt("Player chose to quit the game.")
         kept_dice_numbers = re.findall(r'\d', kept_dice_input)
         kept_dice = tuple(int(d) for d in kept_dice_numbers)
 
-        if not all(dice_roll.count(d) >= kept_dice.count(d) for d in kept_dice):
-          print("Invalid selection. Please choose dice from the roll.")
+        is_valid, error_message = self.validate_keepers(dice_roll, kept_dice)
+        if not is_valid:
+          print(error_message)
           continue
-        roll_score, _ = self.calculate_score(kept_dice)
-        if roll_score > 0:
-          return kept_dice
         else:
-          print("At least one scoring die must be chosen.")
+          return kept_dice
       except ValueError:
         print("Invalid input. Please choose numbers corresponding to dice.")
+
+  def validate_keepers(self, dice_roll, kept_dice):
+    if not all(dice_roll.count(d) >= kept_dice.count(d) for d in kept_dice):
+      return False, "Invalid selection. Please choose dice from the roll."
+    roll_score, _, _ = self.calculate_score(kept_dice)
+    if roll_score == 0:
+      return False, "At least one scoring die must be chosen."
+    return True, ""
   
 class Game:
   """
@@ -133,7 +144,7 @@ class Game:
     self.game_logic = GameLogic()
     self.end_phase = False
 
-  def play_round(self, player):
+  def play_round(self, player, roller):
     """
     Conducts a single round of the game for a given player.
 
@@ -149,8 +160,8 @@ class Game:
     round_score = 0
     
     while dice_left > 0:
-      dice_roll = self.handle_dice_roll(player, dice_left)
-      roll_score, is_hot = self.game_logic.calculate_score(dice_roll)
+      dice_roll = self.handle_dice_roll(player, dice_left, roller)
+      roll_score, is_hot, scorers = self.game_logic.calculate_score(dice_roll)
       
       if roll_score == 0:
         print(f"Farkle! No scoring dice. {player['name']}'s turn is over.\n")
@@ -162,13 +173,14 @@ class Game:
         if self.bank_score(player, round_score):
           return True  # End game
         dice_left = 6
+        round_score = 0
         continue
       round_score, dice_left = self.process_player_decision(player, dice_roll, round_score, dice_left)
       if round_score is None:  # Indicates game end or interruption
         return True
     return False # Continue game
   
-  def handle_dice_roll(self, player, dice_left):
+  def handle_dice_roll(self, player, dice_left, roller):
     """
     Handles the dice rolling action for a player.
 
@@ -179,8 +191,10 @@ class Game:
     Returns:
     tuple of int: The result of the dice roll.
     """
-    dice_roll = self.game_logic.roll_dice(dice_left)
-    print(f"{player['name']}'s roll:", dice_roll)
+    dice_roll_engine = roller or self.game_logic.roll_dice
+    dice_roll = dice_roll_engine(dice_left)
+    print(f"{player['name']}'s roll:")
+    print(f"*** ", ' '.join(map(str, dice_roll)), " ***")
     return dice_roll
   
   def process_player_decision(self, player, dice_roll, round_score, dice_left):
@@ -204,12 +218,12 @@ class Game:
       print("\nGame ended by player.")
       return None, None  # Ends the game
 
-    print(f"{player['name']} has chosen to keep:", chosen_dice)
-    roll_score, _ = self.game_logic.calculate_score(chosen_dice)
+    print(f"{player['name']} has chosen to keep: ", ' '.join(map(str, chosen_dice)))
+    roll_score, _, _ = self.game_logic.calculate_score(chosen_dice)
     round_score += roll_score
     dice_left -= len(chosen_dice)
-
-    player_decision = input(f"Your round score is {round_score}. (R)oll again or (b)ank score? (r/b): ")
+    print(f"Your round score is {round_score}. (R)oll again or (b)ank score? (r/b):")
+    player_decision = input("> ")
     if player_decision.lower() == 'b':
       if self.bank_score(player, round_score):
         return None, None  # End game
@@ -252,10 +266,10 @@ class Game:
 
     self.players = []
     for i in range(num_players):
-      name = input(f"Enter name for Player {i + 1}: ")
+      name = input(f"Enter name for Player {i + 1}: \n> ")
       self.players.append({'name': name, 'score': 0})
   
-  def start_game(self):
+  def start_game(self, roller):
     """
     Starts the game, providing options to start, learn the rules, or quit.
     """
@@ -271,12 +285,12 @@ Choose an option:
 '''
       )
 
-      choice = input("Enter your choice: ").lower()
+      choice = input("Enter your choice:\n> ").lower()
 
       if choice == 's':
         while True:
           try:
-            num_players = int(input("Enter the number of players: "))
+            num_players = int(input("Enter the number of players: \n> "))
             if num_players > 0:
               break
             else:
@@ -284,7 +298,7 @@ Choose an option:
           except ValueError:
             print("Invalid input. Please enter a valid number.")
         self.setup_players(num_players)
-        self.play_game()
+        self.play_game(roller)
         self.display_final_scores()
         break
       elif choice == 't':
@@ -295,7 +309,7 @@ Choose an option:
       else:
         print("Invalid choice, please try again.")
 
-  def play_game(self):
+  def play_game(self, roller):
     """
     Conducts the game rounds, iterating through players.
     """
@@ -305,11 +319,11 @@ Choose an option:
       print(f"\nRound {self.round_number}")
       for player in self.players:
         print(f"\n{player['name']}'s turn. Score: {player['score']}")
-        if self.play_round(player):
+        if self.play_round(player, roller):
           return
-
-
-      continue_game = input("Do you want to play another round? (y/n): ")
+        
+      print("Do you want to play another round? (y/n):")
+      continue_game = input("> ")
       if continue_game.lower() != 'y':
         break
 
@@ -370,6 +384,9 @@ Remember, strategic dice selection and knowing when to bank your score is key!
     for player in sorted_players:
         print(f"{player['name']}: {player['score']} pts")
     
-if __name__ == "__main__":
+def start(roller=None):
   game = Game()
-  game.start_game()
+  game.start_game(roller)
+
+if __name__ == "__main__":
+  start()
