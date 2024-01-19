@@ -1,0 +1,10 @@
+
+Welcome to the Dice Game!
+Choose an option:
+(S)tart the game
+(T)utorial
+(Q)uit
+
+Enter your choice:
+> q
+Thank you for playing!

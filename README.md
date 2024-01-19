@@ -15,7 +15,6 @@ Run Test: pytest
 
 Tests: 
 - Test dice roll
-- Test dice rolls with different numbers of dice
 - Test calculate score:
   - Straight
   - Three pair
@@ -24,4 +23,13 @@ Tests:
   - Leftover 1s
   - Leftover 5s
   - Farkle
-  
+- Test basic sim:
+  - Quitter
+  - One and done
+  - Bank one, roll, then quit
+  - Bank two
+- Test advanced sim:
+  - Hot dice
+  - Cheater
+  - Repeat roller
+  - Farkle

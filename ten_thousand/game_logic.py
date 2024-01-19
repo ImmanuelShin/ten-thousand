@@ -1,4 +1,4 @@
-import random
+import random, re
 from collections import Counter
 
 class GameLogic:
@@ -12,7 +12,7 @@ class GameLogic:
   @staticmethod
   def calculate_score(dice):
     """
-    Calculate and return the score for a given dice roll.
+    Calculate and return the score for a given dice roll and determine if it's a hot dice scenario.
 
     The scoring is based on specific rules:
     - A straight set (1-6) returns 1500.
@@ -27,22 +27,26 @@ class GameLogic:
     dice (tuple of int): A tuple representing the dice roll.
 
     Returns:
-    int: The calculated score.
+    tuple of (int, bool): The calculated score and a boolean indicating if it's a hot dice scenario.
     """
 
     score = 0
     rolls = Counter(dice)
+    hot_count = 0
+    scoring_dice = []
 
     # Straight
     if set(dice) == set(range(1, 7)):
-      return 1500
+      return 1500, True, dice
     
     # Three Pair
     if len(rolls) == 3 and all(roll == 2 for roll in rolls.values()):
-      return 1500
+      return 1500, True, dice
 
     for num, roll in rolls.items():
       if roll >= 3:
+        hot_count += roll
+        scoring_dice.extend([num] * roll)
         if num == 1:
           score += 1000 * (roll - 2) # N of a kind 1
         else:
@@ -51,10 +55,14 @@ class GameLogic:
     # Leftover 1s and 5s
     if rolls[1] < 3:
         score += rolls[1] * 100
+        hot_count += rolls[1]
+        scoring_dice.extend([1] * rolls[1])
     if rolls[5] < 3:
+        hot_count += rolls[5]
         score += rolls[5] * 50
+        scoring_dice.extend([5] * rolls[5])
 
-    return score
+    return score, hot_count == len(dice), tuple(scoring_dice)
   
   @staticmethod
   def roll_dice(dice):
@@ -68,6 +76,43 @@ class GameLogic:
     tuple: A tuple containing the results of each dice roll.
     """
     return tuple(random.randint(1, 6) for _ in range(0,dice))
+  
+  def set_aside_dice(self, dice_roll):
+    """
+    Allows the player to select dice to set aside for scoring.
+
+    Parameters:
+    dice_roll (tuple of int): The dice roll from which the player selects.
+
+    Returns:
+    tuple of int: The dice selected by the player for scoring.
+    """
+
+    while True:
+      try:
+        print("Enter the dice you want to keep, or (q)uit:")
+        kept_dice_input = input("> ")
+        if kept_dice_input.lower() == 'q':
+          raise KeyboardInterrupt("Player chose to quit the game.")
+        kept_dice_numbers = re.findall(r'\d', kept_dice_input)
+        kept_dice = tuple(int(d) for d in kept_dice_numbers)
+
+        is_valid, error_message = self.validate_keepers(dice_roll, kept_dice)
+        if not is_valid:
+          print(error_message)
+          continue
+        else:
+          return kept_dice
+      except ValueError:
+        print("Invalid input. Please choose numbers corresponding to dice.")
+
+  def validate_keepers(self, dice_roll, kept_dice):
+    if not all(dice_roll.count(d) >= kept_dice.count(d) for d in kept_dice):
+      return False, "Invalid selection. Please choose dice from the roll."
+    roll_score, _, _ = self.calculate_score(kept_dice)
+    if roll_score == 0:
+      return False, "At least one scoring die must be chosen."
+    return True, ""
   
 class Game:
   """
@@ -99,7 +144,7 @@ class Game:
     self.game_logic = GameLogic()
     self.end_phase = False
 
-  def play_round(self, player):
+  def play_round(self, player, roller):
     """
     Conducts a single round of the game for a given player.
 
@@ -115,65 +160,80 @@ class Game:
     round_score = 0
     
     while dice_left > 0:
-      dice_roll = self.game_logic.roll_dice(dice_left)
-      print(f"{player}'s roll:", dice_roll)
-
-      roll_score = self.game_logic.calculate_score(dice_roll)
+      dice_roll = self.handle_dice_roll(player, dice_left, roller)
+      roll_score, is_hot, scorers = self.game_logic.calculate_score(dice_roll)
+      
       if roll_score == 0:
-        print(f"Farkle! No scoring dice. {player}'s turn is over.\n")
+        print(f"Farkle! No scoring dice. {player['name']}'s turn is over.\n")
         round_score = 0
         break  # Ends the current round
-      try:
-        chosen_dice = self.set_aside_dice(dice_roll)
-      except KeyboardInterrupt:
-        print("\nGame ended by player.")
-        return True  # Ends the game
-      roll_score = self.game_logic.calculate_score(chosen_dice)
-      print(f"{player} has chosen to keep:", chosen_dice)
-
-      # Update round score and calculate the number of dice left
-      round_score += roll_score
-      dice_left -= len(chosen_dice)
-
-      # Player decision to bank score or continue rolling
-      player_decision = input(f"Your round score is {round_score}. (R)oll again or (b)ank score? (r/b): ")
-      if player_decision.lower() == 'b':
+      elif is_hot:
+        print(f"Hot Dice! {player['name']} receives another turn!")
+        round_score += roll_score
         if self.bank_score(player, round_score):
           return True  # End game
-        break
-      elif player_decision.lower() == 'q':
-        print("Thank you for playing! Ending the game.")
-        return True  # End game
+        dice_left = 6
+        round_score = 0
+        continue
+      round_score, dice_left = self.process_player_decision(player, dice_roll, round_score, dice_left)
+      if round_score is None:  # Indicates game end or interruption
+        return True
     return False # Continue game
   
-  def set_aside_dice(self, dice_roll):
+  def handle_dice_roll(self, player, dice_left, roller):
     """
-    Allows the player to select dice to set aside for scoring.
+    Handles the dice rolling action for a player.
 
     Parameters:
-    dice_roll (tuple of int): The dice roll from which the player selects.
+    player (dict): A dictionary containing player information.
+    dice_left (int): The number of dice the player is rolling.
 
     Returns:
-    tuple of int: The dice selected by the player for scoring.
+    tuple of int: The result of the dice roll.
     """
-
-    while True:
-      try:
-        kept_dice_input = input("Enter the dice you want to keep (e.g., 156 for keeping 1, 5, and 6): ")
-        if kept_dice_input.lower() == 'q':
-          raise KeyboardInterrupt("Player chose to quit the game.")
-        kept_dice = tuple(int(d) for d in kept_dice_input)
-
-        if not all(dice_roll.count(d) >= kept_dice.count(d) for d in kept_dice):
-          print("Invalid selection. Please choose dice from the roll.")
-          continue
-        if self.game_logic.calculate_score(kept_dice) > 0:
-          return kept_dice
-        else:
-          print("At least one scoring die must be chosen.")
-      except ValueError:
-        print("Invalid input. Please choose numbers corresponding to dice.")
+    dice_roll_engine = roller or self.game_logic.roll_dice
+    dice_roll = dice_roll_engine(dice_left)
+    print(f"{player['name']}'s roll:")
+    print(f"*** ", ' '.join(map(str, dice_roll)), " ***")
+    return dice_roll
   
+  def process_player_decision(self, player, dice_roll, round_score, dice_left):
+    """
+    Processes the player's decision after a dice roll, including setting aside dice for scoring
+    and deciding whether to roll again or bank the score.
+
+    Parameters:
+    player (dict): A dictionary containing player information.
+    dice_roll (tuple of int): The result of the player's dice roll.
+    round_score (int): The player's score for the current round.
+    dice_left (int): The number of dice remaining for the player to roll.
+
+    Returns:
+    tuple (int, int or None): A tuple containing the updated round score and remaining dice.
+                               If the game or round ends, returns (None, None) or (0, 0).
+    """
+    try:
+      chosen_dice = self.game_logic.set_aside_dice(dice_roll)
+    except KeyboardInterrupt:
+      print("\nGame ended by player.")
+      return None, None  # Ends the game
+
+    print(f"{player['name']} has chosen to keep: ", ' '.join(map(str, chosen_dice)))
+    roll_score, _, _ = self.game_logic.calculate_score(chosen_dice)
+    round_score += roll_score
+    dice_left -= len(chosen_dice)
+    print(f"Your round score is {round_score}. (R)oll again or (b)ank score? (r/b):")
+    player_decision = input("> ")
+    if player_decision.lower() == 'b':
+      if self.bank_score(player, round_score):
+        return None, None  # End game
+      return 0, 0
+    elif player_decision.lower() == 'q':
+      print("Thank you for playing! Ending the game.")
+      return None, None  # End game
+
+    return round_score, dice_left
+
   def bank_score(self, player, score):
     """
     Adds the round score to the player's total score and checks for game end conditions.
@@ -206,27 +266,31 @@ class Game:
 
     self.players = []
     for i in range(num_players):
-      name = input(f"Enter name for Player {i + 1}: ")
+      name = input(f"Enter name for Player {i + 1}: \n> ")
       self.players.append({'name': name, 'score': 0})
   
-  def start_game(self):
+  def start_game(self, roller):
     """
     Starts the game, providing options to start, learn the rules, or quit.
     """
 
     while True:
-      print("\nWelcome to the Dice Game!")
-      print("Choose an option:")
-      print("(S)tart the game")
-      print("(T)utorial")
-      print("(Q)uit")
+      print(
+'''
+Welcome to the Dice Game!
+Choose an option:
+(S)tart the game
+(T)utorial
+(Q)uit
+'''
+      )
 
-      choice = input("Enter your choice: ").lower()
+      choice = input("Enter your choice:\n> ").lower()
 
       if choice == 's':
         while True:
           try:
-            num_players = int(input("Enter the number of players: "))
+            num_players = int(input("Enter the number of players: \n> "))
             if num_players > 0:
               break
             else:
@@ -234,7 +298,7 @@ class Game:
           except ValueError:
             print("Invalid input. Please enter a valid number.")
         self.setup_players(num_players)
-        self.play_game()
+        self.play_game(roller)
         self.display_final_scores()
         break
       elif choice == 't':
@@ -245,7 +309,7 @@ class Game:
       else:
         print("Invalid choice, please try again.")
 
-  def play_game(self):
+  def play_game(self, roller):
     """
     Conducts the game rounds, iterating through players.
     """
@@ -254,12 +318,12 @@ class Game:
     while True:
       print(f"\nRound {self.round_number}")
       for player in self.players:
-        print(f"\n{player}'s turn:")
-        if self.play_round(player):
+        print(f"\n{player['name']}'s turn. Score: {player['score']}")
+        if self.play_round(player, roller):
           return
-
-
-      continue_game = input("Do you want to play another round? (y/n): ")
+        
+      print("Do you want to play another round? (y/n):")
+      continue_game = input("> ")
       if continue_game.lower() != 'y':
         break
 
@@ -270,27 +334,32 @@ class Game:
     Displays the game rules and instructions.
     """
 
-    print("\nGame Rules:")
-    print("1. A straight set (1-6) returns 1500 points.")
-    print("2. Three pairs return 1500 points.")
-    print("3. Three of a kind (except 1s) scores 100 times the dice number.")
-    print("4. Three 1s score 1000 points.")
-    print("5. Each additional dice in a set of three multiplies the score by 2.")
-    print("   For example, four of a kind is double the three of a kind score.")
-    print("6. Single 1s score 100 points each.")
-    print("7. Single 5s score 50 points each.")
-    print("8. A set of two triples scores the sum of the two triples' scores.")
-    print("\nScoring Examples:")
-    print("   Roll [1,1,1,5,5,2] can score 1000 (for three 1s) + 50 (for one 5) = 1050 points.")
-    print("   Roll [2,2,2,3,3,3] can score 200 (for three 2s) + 300 (for three 3s) = 500 points.")
-    print("\nHow to Play:")
-    print("To play, roll the dice and choose which ones to keep for scoring.")
-    print("You can choose to 'bank' your score or roll the remaining dice again.")
-    print("If none of the dice rolled contribute to the score, it's a 'Farkle', and your turn ends.")
-    print("The game continues until a player reaches a predetermined score (e.g., 10,000 points).")
-    print("If you bank your score, your turn ends, and the next player rolls.")
-    print("Remember, strategic dice selection and knowing when to bank your score is key!")
-    print("\n")
+    print(
+'''
+Game Rules:
+1. A straight set (1-6) returns 1500 points.
+2. Three pairs return 1500 points.
+3. Three of a kind (except 1s) scores 100 times the dice number.
+4. Three 1s score 1000 points.
+5. Each additional dice in a set of three multiplies the score by 2.
+   For example, four of a kind is double the three of a kind score.
+6. Single 1s score 100 points each.
+7. Single 5s score 50 points each.
+8. A set of two triples scores the sum of the two triples' scores.
+
+Scoring Examples:
+Roll [1,1,1,5,5,2] can score 1000 (for three 1s) + 50 (for one 5) = 1050 points.
+Roll [2,2,2,3,3,3] can score 200 (for three 2s) + 300 (for three 3s) = 500 points.
+
+How to Play:
+To play, roll the dice and choose which ones to keep for scoring.
+You can choose to 'bank' your score or roll the remaining dice again.
+If none of the dice rolled contribute to the score, it's a 'Farkle', and your turn ends.
+The game continues until a player reaches a predetermined score (e.g., 10,000 points).
+If you bank your score, your turn ends, and the next player rolls.
+Remember, strategic dice selection and knowing when to bank your score is key!
+'''
+    )
 
   def display_final_scores(self):
     """
@@ -305,18 +374,19 @@ class Game:
 
     if exact_winner:
       print(f"{exact_winner['name']}: {exact_winner['score']} pts (winner)")
+      sorted_players = sorted((player for player in self.players if player != exact_winner), key=lambda x: x['score'], reverse=True)
     else:
       # If no exact 10,000 points winner, the highest scorer is the default winner
       highest_score = max(self.players, key=lambda x: x['score'])
       print(f"{highest_score['name']}: {highest_score['score']} pts (winner)")
-    
-    # Need to figure this one out later
-    sorted_players = sorted((player for player in self.players if player != exact_winner), key=lambda x: x['score'],reverse=True)
+      sorted_players = sorted((player for player in self.players if player != highest_score), key=lambda x: x['score'], reverse=True)
 
-    # Still need to fix repeat name printing
     for player in sorted_players:
         print(f"{player['name']}: {player['score']} pts")
     
-if __name__ == "__main__":
+def start(roller=None):
   game = Game()
-  game.start_game()
+  game.start_game(roller)
+
+if __name__ == "__main__":
+  start()

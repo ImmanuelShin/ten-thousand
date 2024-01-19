@@ -1,0 +1,34 @@
+
+Welcome to the Dice Game!
+Choose an option:
+(S)tart the game
+(T)utorial
+(Q)uit
+
+Enter your choice:
+> s
+Enter the number of players: 
+> 1
+Enter name for Player 1: 
+> Bob
+
+Round 1
+
+Bob's turn. Score: 0
+
+--- Round 1 ---
+Bob's roll:
+*** 4 2 6 4 6 5 ***
+Enter the dice you want to keep, or (q)uit:
+> 5
+Bob has chosen to keep: 5
+Your round score is 50. (R)oll again or (b)ank score? (r/b):
+> b
+Bob banks their score. Total score: 50
+Do you want to play another round? (y/n):
+> n
+
+Thank you for playing the game!
+
+Final Scores:
+Bob: 50 pts (winner)
